@@ -36,7 +36,7 @@
 #### Решение в [файле main.py](https://github.com/nemoymoy/Learning_English_Telegram_bot/blob/main/main.py)
 
 ## Написана документация по использованию программы.
-### Написаны комментарии в исполняемом файле программы
+### Написаны комментарии в исполняемом файле программы и в файле README.md
 
 ## В личном кабинете отправлена ссылка на репозиторий с решением.
 ### Создан публичный репозиторий [Learning_English_Telegram_bot](https://github.com/nemoymoy/Learning_English_Telegram_bot)
