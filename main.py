@@ -35,22 +35,17 @@ print(userStep)
 # global buttons
 buttons = list()
 
-
-
 def show_hint(*lines):
     return '\n'.join(lines)
 
-
 def show_target(data):
     return f"{data['target_word']} -> {data['translate_word']}"
-
 
 class Command:
     ADD_WORD = 'Добавить слово ➕'
     DELETE_WORD = 'Удалить слово🔙'
     NEXT = 'Дальше ⏭'
     CLEAR = 'Очистить рейтинг 🆑'
-
 
 class MyStates(StatesGroup):
     target_word = State()
@@ -235,6 +230,32 @@ def add_word_to_bd(message):
     #     bot.reply_to(message, "Я создал папку %s" % path)
     # else:
     #     bot.reply_to(message, '\n'.join(["Произошла ошибка. Текст ошибки", response.text]))
+
+@bot.message_handler(func=lambda message: message.text == Command.CLEAR)
+def clear_rating(message):
+    # cid = message.chat.id
+    # userStep[cid] = 1
+    # print(message.text)  # сохранить в БД
+
+    chat_id = message.chat.id
+    msg = bot.send_message(chat_id, 'Вы точно хотите очистить рейтинг?\nНапишите фразу: Да, я хочу')
+    bot.register_next_step_handler(msg, clear_rating_to_bd)
+
+def clear_rating_to_bd(message):
+    if message.text == "Да, я хочу":
+        result = len(query_to_bd(f"DELETE FROM tab_user_step "
+                             f"WHERE id_user='{query_to_bd(f"SELECT id_user "
+                                                         f"FROM tab_users "
+                                                         f"WHERE user_name='{str(message.from_user.id)}'")[0][0]}' "
+                             f"RETURNING *"))
+        print(f'Из БД удалено {result} шаг(а/ов) пользователя {message.from_user.id}')
+        print(f'Обновлен рейтинг пользователя до: '
+              f'{query_to_bd(f"UPDATE tab_users "
+                             f"SET user_step='0' "
+                             f"WHERE user_name='{message.from_user.id}' "
+                             f"RETURNING user_step")[0][0]}')
+        bot.send_message(message.chat.id, f'{message.from_user.first_name} {message.from_user.last_name}, '
+                                          f'Ваш рейтинг - 0')
 
 
 @bot.message_handler(func=lambda message: True, content_types=['text'])
