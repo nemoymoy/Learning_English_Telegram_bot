@@ -7,8 +7,10 @@ from telebot.handler_backends import State, StatesGroup
 
 import psycopg2
 
+# Создаем функцию подключения к БД и отправки SQL-запросов
 def query_to_bd(sql_query):
-    conn = psycopg2.connect(dbname="learning_english_telegram_bot", host="127.0.0.1", user="guest", password="guest", port="5432")
+    conn = psycopg2.connect(dbname="learning_english_telegram_bot", host="127.0.0.1", user="guest", password="guest",
+                            port="5432")
     with conn.cursor() as cur:
         cur.execute(sql_query)
         conn.commit()
@@ -17,46 +19,55 @@ def query_to_bd(sql_query):
     return result
 
 state_storage = StateMemoryStorage()
+
+# Подключаемся к ранее созданному в Телеграм боту, токен загружаем из файла "key.txt"
 with open('key.txt') as f:
     token_bot = f.readline().strip()
 bot = TeleBot(token_bot, state_storage=state_storage)
 
 print('Start telegram bot...')
 
+# Загружаем из БД список зарегистрированных пользователей
 known_users = list()
 for row in query_to_bd("SELECT user_name FROM tab_users"):
     known_users.append(row[0])
-print(known_users)
+# print(known_users)
 
+# Загружаем из БД и формируем словарь с ключом имени пользователя и значением количества шагов (рейтингом)
 userStep = dict()
 for row in query_to_bd("SELECT user_name, user_step FROM tab_users"):
     userStep[row[0]] = row[1]
-print(userStep)
+# print(userStep)
 # global buttons
+
+# Объявляем переменную для сохранения кнопок бота
 buttons = list()
 
+# Функция формирования текста ответа бота
 def show_hint(*lines):
     return '\n'.join(lines)
 
+# Функция формирования строки целевого слова и перевода
 def show_target(data):
     return f"{data['target_word']} -> {data['translate_word']}"
 
+# Класс команд кнопок бота
 class Command:
     ADD_WORD = 'Добавить слово ➕'
     DELETE_WORD = 'Удалить слово🔙'
     NEXT = 'Дальше ⏭'
     CLEAR = 'Очистить рейтинг 🆑'
 
+# Класс состояний
 class MyStates(StatesGroup):
     target_word = State()
     translate_word = State()
     another_words = State()
 
-
+# Функция добавления нового пользователя в БД
 def get_user_step(uid):
     print(uid)
     if uid in userStep:
-
         return userStep[uid]
     else:
         known_users.append(uid)
@@ -66,6 +77,7 @@ def get_user_step(uid):
               f'{query_to_bd(f"INSERT INTO tab_users (user_name, user_step) VALUES ({uid}, {0}) RETURNING user_name")[0][0]}')
         return 0
 
+# Функция обработки команды "/start"
 @bot.message_handler(commands=['start'])
 def send_wellcome(message):
     bot.send_message(message.chat.id, f'Привет👋, {message.from_user.first_name} {message.from_user.last_name}!\n'
@@ -76,58 +88,52 @@ def send_wellcome(message):
                                       f'свою собственную базу для обучения.\n'
                                       f'Для этого воспользуйся инструментами:\n'
                                       f'- добавить слово ➕;\n- удалить слово 🔙.\nНу что, начнём ⏭')
-    bot.send_message(message.chat.id, f'Текущий рейтинг - {get_user_step(str(message.from_user.id))} слов.')
+    bot.send_message(message.chat.id, f'Текущий рейтинг - {get_user_step(str(message.from_user.id))} слов(о/а).')
 
+# Функция обработки команды /cards
 @bot.message_handler(commands=['cards'])
 def create_cards(message):
     cid = message.chat.id
-    # tid = message.from_user
-    # print(cid)
-    # print(tid)
-    # if cid not in known_users:
-    #     known_users.append(cid)
-    #     userStep[cid] = 0
-        # bot.send_message(cid, "Hello, stranger, let study English...")
     markup = types.ReplyKeyboardMarkup(row_width=2)
-
-    # global buttons
     buttons.clear()
-
+    # Определяем возможный набор русских слов для задания
     possible_rus_words = query_to_bd(f"select rus_word "
                                             f"from tab_russian_words "
-                                            f"where id_user='1' or id_user='{query_to_bd(f"select id_user from tab_users where user_name='{cid}'")[0][0]}'"
+                                            f"where id_user='1' or id_user='{query_to_bd(f"select id_user from "
+                                                                                         f"tab_users where user_name='{cid}'")[0][0]}'"
                                             f"except select rus_word "
                                             f"from tab_russian_words "
                                             f"join tab_user_step on tab_russian_words.id_rus_word = tab_user_step.id_rus_word "
                                             f"join tab_users on tab_user_step.id_user = tab_users.id_user "
                                             f"where user_name='{cid}'")
+    # Если есть неизученные слова для задания, то
     if len(possible_rus_words) > 0:
-        # translate = 'Мир'  # брать из БД
+        # Выбираем случайное русское слово из возможных
         translate = random.choice(possible_rus_words)[0]
-
         print(f'Заданное слово: {translate}')
-
-        # target_word = 'Peace'  # брать из БД
+        # Выбираем английский перевод к выбранному слову
         target_word = query_to_bd(f"select eng_word "
                                   f"from tab_english_words "
                                   f"join tab_russian_words on tab_english_words.id_rus_word = tab_russian_words.id_rus_word "
                                   f"where rus_word='{translate}'")[0][0]
         print(f'Перевод: {target_word}')
 
+        # Присваиваем текст кнопке с правильным переводом
         target_word_btn = types.KeyboardButton(target_word)
         buttons.append(target_word_btn)
 
-        # others = ['Green', 'White', 'Hello']  # брать из БД
+        # Выбираем три случайных английских слова
         others = list()
         for word in query_to_bd(f"select eng_word from tab_english_words where eng_word != '{target_word}' order by random() limit 3"):
             others.append(word[0])
         print(f'Три других варианта: {others}')
 
+        # Присваиваем текст трем другим кнопкам
         other_words_btns = [types.KeyboardButton(word) for word in others]
         buttons.extend(other_words_btns)
         random.shuffle(buttons)
 
-
+        # Отображаем функциональные кнопки
         next_btn = types.KeyboardButton(Command.NEXT)
         add_word_btn = types.KeyboardButton(Command.ADD_WORD)
         delete_word_btn = types.KeyboardButton(Command.DELETE_WORD)
@@ -136,6 +142,7 @@ def create_cards(message):
 
         markup.add(*buttons)
 
+        # Выводим слово задание
         greeting = f"Выбери перевод слова:\n🇷🇺 {translate}"
         bot.send_message(message.chat.id, greeting, reply_markup=markup)
         bot.set_state(message.from_user.id, MyStates.target_word, message.chat.id)
@@ -143,6 +150,7 @@ def create_cards(message):
             data['target_word'] = target_word
             data['translate_word'] = translate
             data['other_words'] = others
+    # Если все слова изучены, то
     else:
         user_step = query_to_bd(f"SELECT user_name, user_step FROM tab_users WHERE user_name='{message.from_user.id}'")[0][1]
         bot.send_message(message.chat.id, f'Вы достигли максимального рейтинга - '
@@ -151,21 +159,20 @@ def create_cards(message):
                                           f'\n- добавить слово ➕;'
                                           f'\n- очистить рейтинг 🆑.')
 
+# Функция обработки кнопки "Далее"
 @bot.message_handler(func=lambda message: message.text == Command.NEXT)
 def next_cards(message):
     create_cards(message)
 
+# Функция обработки кнопки "Удалить слово"
 list_user_words = list()
 @bot.message_handler(func=lambda message: message.text == Command.DELETE_WORD)
 def delete_word(message):
-    # with bot.retrieve_data(message.from_user.id, message.chat.id) as data:
-    #     print(data['target_word'])  # удалить из БД
-
+    # Запрашиваем из БД русские слова, которые можно удалить пользователю
     user_words = query_to_bd(f"select rus_word "
                              f"from tab_russian_words "
                              f"join tab_users on tab_russian_words.id_user = tab_users.id_user "
                              f"where user_name='{message.from_user.id}'")
-    # print(user_words)
     text = ""
     list_user_words.clear()
     for word in user_words:
@@ -175,7 +182,7 @@ def delete_word(message):
     msg = bot.send_message(chat_id,f'Ваши слова в БД:\n{text}Напишите слово для удаления:')
     bot.register_next_step_handler(msg, del_word_to_bd)
 
-
+# Функция удаления слова из БД
 def del_word_to_bd(message):
     if message.text in list_user_words:
         target = message.text
@@ -192,16 +199,14 @@ def del_word_to_bd(message):
                                                f"\nНапишите слово для удаления:")
         bot.register_next_step_handler(msg, del_word_to_bd)
 
+# Функция обработки кнопки "Добавит слово"
 @bot.message_handler(func=lambda message: message.text == Command.ADD_WORD)
 def add_word(message):
-    # cid = message.chat.id
-    # userStep[cid] = 1
-    # print(message.text)  # сохранить в БД
-
     chat_id = message.chat.id
     msg = bot.send_message(chat_id, 'Введите слово на русском и после двоеточия его перевод по шаблону:\n язык:language')
     bot.register_next_step_handler(msg, add_word_to_bd)
 
+# Функция добавления слова в БД
 def add_word_to_bd(message):
     if ':' in message.text:
         source = message.text[: message.text.find(':')]
@@ -228,16 +233,14 @@ def add_word_to_bd(message):
                                'Введите слово на русском и после двоеточия его перевод по шаблону:\n язык:language')
         bot.register_next_step_handler(msg, add_word_to_bd)
 
+# Функция обработки кнопки "Очистить рейтинг"
 @bot.message_handler(func=lambda message: message.text == Command.CLEAR)
 def clear_rating(message):
-    # cid = message.chat.id
-    # userStep[cid] = 1
-    # print(message.text)  # сохранить в БД
-
     chat_id = message.chat.id
     msg = bot.send_message(chat_id, 'Вы точно хотите очистить рейтинг?\nНапишите фразу: Да, я хочу')
     bot.register_next_step_handler(msg, clear_rating_to_bd)
 
+# Функция удаления всех шагов пользователя из БД (очистка рейтинга)
 def clear_rating_to_bd(message):
     if message.text == "Да, я хочу":
         result = len(query_to_bd(f"DELETE FROM tab_user_step "
@@ -254,7 +257,7 @@ def clear_rating_to_bd(message):
         bot.send_message(message.chat.id, f'{message.from_user.first_name} {message.from_user.last_name}, '
                                           f'Ваш рейтинг - 0')
 
-
+# Функция обработки выбора ответа на задание
 @bot.message_handler(func=lambda message: True, content_types=['text'])
 def message_reply(message):
     text = message.text
@@ -308,7 +311,6 @@ bot.add_custom_filter(custom_filters.StateFilter(bot))
 bot.infinity_polling(skip_pending=True)
 
 if __name__ == '__main__':
-
 
     bot.polling()
 
