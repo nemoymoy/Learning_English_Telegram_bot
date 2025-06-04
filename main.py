@@ -71,6 +71,7 @@ def send_wellcome(message):
     bot.send_message(message.chat.id, f'Привет👋, {message.from_user.first_name} {message.from_user.last_name}!\n'
                                       f'Давай попрактикуемся в английском языке. Тренировки можешь проходить '
                                       f'в удобном для себя темпе.\n'
+                                      f'Команда "/cards" или кнопка "Дальше ⏭" предложит новое задание.'
                                       f'У тебя есть возможность использовать тренажёр, как конструктор, и собирать '
                                       f'свою собственную базу для обучения.\n'
                                       f'Для этого воспользуйся инструментами:\n'
@@ -215,21 +216,17 @@ def add_word_to_bd(message):
         print(f'В БД добавлено слово: "{query_to_bd(f"INSERT INTO tab_english_words (eng_word, id_rus_word) "
                                                     f"VALUES ('{target}', (SELECT id_rus_word FROM tab_russian_words WHERE rus_word='{source}')"
                                                     f") RETURNING eng_word")[0][0]}"')
-        bot.send_message(message.chat.id,
-                               f'Пара слов: {source} и {target} добавлена в БД.')
+
+        count_possible_words = len(query_to_bd(f"select rus_word "
+                                         f"from tab_russian_words "
+                                         f"where id_user='1' or id_user='{query_to_bd(f"select id_user from tab_users where user_name='{message.from_user.id}'")[0][0]}'"))
+        bot.send_message(message.chat.id, f'Пара слов: {source} и {target} добавлена в БД.'
+                                          f'\nОбщее количество слов для обучения - {count_possible_words}')
     else:
         chat_id = message.chat.id
         msg = bot.send_message(chat_id,
                                'Введите слово на русском и после двоеточия его перевод по шаблону:\n язык:language')
         bot.register_next_step_handler(msg, add_word_to_bd)
-
-    # headers = {'Authorization': 'OAuth %s' % YANDEX_TOKEN}
-    # request_url = HOST_YANDEX_DISK + '/v1/disk/resources?path=%s' % path
-    # response = requests.put(url=request_url, headers=headers)
-    # if response.status_code == 201:
-    #     bot.reply_to(message, "Я создал папку %s" % path)
-    # else:
-    #     bot.reply_to(message, '\n'.join(["Произошла ошибка. Текст ошибки", response.text]))
 
 @bot.message_handler(func=lambda message: message.text == Command.CLEAR)
 def clear_rating(message):
